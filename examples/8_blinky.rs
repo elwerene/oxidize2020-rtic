@@ -4,20 +4,15 @@
 #![no_main]
 #![no_std]
 
+use embedded_hal::digital::v2::OutputPin as _;
+use nrf52840_hal::gpio::{p0, Level, Output, Pin, PushPull};
 use panic_halt as _;
 use rtic::{app, cyccnt::U32Ext};
-use rtt_target::{rprintln, rtt_init_print};
-use stm32l4xx_hal::{
-    gpio::{gpiob::PB13, Output, PushPull},
-    prelude::*,
-};
 
-#[app(device = stm32l4xx_hal::stm32,
-      peripherals = true,
-      monotonic = rtic::cyccnt::CYCCNT)]
+#[app(device = nrf52840_hal::pac, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
     struct Resources {
-        led: PB13<Output<PushPull>>,
+        led: Pin<Output<PushPull>>,
     }
 
     #[init(spawn = [blinky])]
@@ -31,22 +26,15 @@ const APP: () = {
         cp.DCB.enable_trace();
         cp.DWT.enable_cycle_counter();
 
-        // Device access (Peripheral Access Crate)
-        let pac = cx.device;
-
         // Enable logging
-        rtt_init_print!();
-        rprintln!("Hello from init!");
+        app::init();
+        log::info!("Hello from init!");
 
-        // Use the HAL to get a pin to control.
-        let mut rcc = pac.RCC.constrain();
-        let mut gpiob = pac.GPIOB.split(&mut rcc.ahb2);
-
-        let mut led = gpiob
-            .pb13
-            .into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
-
-        led.set_low().ok();
+        // Set up a LED
+        let periph = nrf52840_hal::pac::Peripherals::take().unwrap();
+        let pins = p0::Parts::new(periph.P0);
+        let mut led = pins.p0_13.degrade().into_push_pull_output(Level::High);
+        let _ = led.set_high();
 
         // Start the blinky task!
         cx.spawn.blinky().ok();
@@ -59,7 +47,7 @@ const APP: () = {
 
     #[idle]
     fn idle(_cx: idle::Context) -> ! {
-        rprintln!("Hello from idle!");
+        log::info!("Hello from idle!");
 
         loop {
             continue;
@@ -74,15 +62,15 @@ const APP: () = {
         // Extract the LED
         let led = cx.resources.led;
 
-        if *FLAG == false {
-            led.set_low().ok();
-            rprintln!("LED Off");
+        if !(*FLAG) {
+            let _ = led.set_low();
+            log::info!("LED Off");
         } else {
-            led.set_high().ok();
-            rprintln!("LED On");
+            let _ = led.set_high();
+            log::info!("LED On");
         }
 
-        cx.schedule.blinky(cx.scheduled + 2_000_000.cycles()).ok();
+        cx.schedule.blinky(cx.scheduled + 64_000_000.cycles()).ok();
 
         *FLAG = !*FLAG;
     }
@@ -91,7 +79,7 @@ const APP: () = {
     //
     // One needs one free interrupt per priority level used in software tasks.
     extern "C" {
-        fn DFSDM1();
-        fn DFSDM2();
+        fn TIMER1();
+        fn TIMER2();
     }
 };

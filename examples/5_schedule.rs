@@ -5,10 +5,8 @@
 
 use panic_halt as _;
 use rtic::{app, cyccnt::U32Ext};
-use rtt_target::{rprintln, rtt_init_print};
-use stm32l4xx_hal as _;
 
-#[app(device = stm32l4xx_hal::stm32, monotonic = rtic::cyccnt::CYCCNT)]
+#[app(device = nrf52840_hal::pac, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
     #[init(schedule = [hello_world_task])]
     fn init(cx: init::Context) {
@@ -22,19 +20,19 @@ const APP: () = {
         cp.DWT.enable_cycle_counter();
 
         // Enable logging
-        rtt_init_print!();
+        app::init();
 
-        // Schedule the task 3s into the future (the MCU runs at 4 MHz).
+        // Schedule the task 3s into the future (the MCU runs at 64 MHz).
         cx.schedule
-            .hello_world_task(cx.start + 12_000_000.cycles())
+            .hello_world_task(cx.start + 192_000_000.cycles())
             .ok();
 
-        rprintln!("Hello from init!");
+        log::info!("Hello from init!");
     }
 
     #[idle]
     fn idle(_cx: idle::Context) -> ! {
-        rprintln!("Hello from idle!");
+        log::info!("Hello from idle!");
 
         loop {
             continue;
@@ -43,13 +41,13 @@ const APP: () = {
 
     #[task]
     fn hello_world_task(_cx: hello_world_task::Context) {
-        rprintln!("Hello world from the future!");
+        log::info!("Hello world from the future!");
     }
 
     // Here we list unused interrupt vectors that can be used to dispatch software tasks
     //
     // One needs one free interrupt per priority level used in software tasks.
     extern "C" {
-        fn DFSDM1();
+        fn TIMER1();
     }
 };

@@ -5,10 +5,9 @@
 
 use panic_halt as _;
 use rtic::app;
-use rtt_target::{rprintln, rtt_init_print};
-use stm32l4xx_hal as _;
 
-#[app(device = stm32l4xx_hal::stm32)]
+
+#[app(device = nrf52840_hal::pac)]
 const APP: () = {
     struct Resources {
         // Resources go here!
@@ -17,18 +16,18 @@ const APP: () = {
     #[init(spawn = [low_prio_task, high_prio_task])]
     fn init(cx: init::Context) {
         // Enable logging
-        rtt_init_print!();
+        app::init();
 
         // Spawn the low priority task first and the the high priority task.
         cx.spawn.low_prio_task().ok();
         cx.spawn.high_prio_task().ok(); // Even though it is spawned later it will run first!
 
-        rprintln!("Hello from init!");
+        log::info!("Hello from init!");
     }
 
     #[idle]
     fn idle(_cx: idle::Context) -> ! {
-        rprintln!("Hello from idle!");
+        log::info!("Hello from idle!");
 
         loop {
             continue;
@@ -37,19 +36,19 @@ const APP: () = {
 
     #[task]
     fn low_prio_task(_cx: low_prio_task::Context) {
-        rprintln!("Low prio task!");
+        log::info!("Low prio task!");
     }
 
     #[task(priority = 2)]
     fn high_prio_task(_cx: high_prio_task::Context) {
-        rprintln!("High prio task!");
+        log::info!("High prio task!");
     }
 
     // Here we list unused interrupt vectors that can be used to dispatch software tasks
     //
     // One needs one free interrupt per priority level used in software tasks.
     extern "C" {
-        fn DFSDM1();
-        fn DFSDM2();
+        fn TIMER1();
+        fn TIMER2();
     }
 };

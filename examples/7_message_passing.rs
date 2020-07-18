@@ -6,22 +6,20 @@
 
 use panic_halt as _;
 use rtic::app;
-use rtt_target::{rprintln, rtt_init_print};
-use stm32l4xx_hal as _;
 
-#[app(device = stm32l4xx_hal::stm32)]
+#[app(device = nrf52840_hal::pac)]
 const APP: () = {
     #[init(spawn = [printer1, printer2])]
     fn init(cx: init::Context) {
         // Enable logging
-        rtt_init_print!();
+        app::init();
 
         // Print the value via message passing!
         cx.spawn.printer1(42).ok();
 
         // This will fail as printer1 has default capacity of 1!
-        if let Err(_) = cx.spawn.printer1(43) {
-            rprintln!("Second spawn failed!");
+        if cx.spawn.printer1(43).is_err() {
+            log::info!("Second spawn failed!");
         }
 
         // Print to the printer that can take multiple!
@@ -30,12 +28,12 @@ const APP: () = {
         cx.spawn.printer2(3).ok();
         cx.spawn.printer2(4).ok();
 
-        rprintln!("Hello from init!");
+        log::info!("Hello from init!");
     }
 
     #[idle]
     fn idle(_cx: idle::Context) -> ! {
-        rprintln!("Hello from idle!");
+        log::info!("Hello from idle!");
 
         loop {
             continue;
@@ -46,20 +44,20 @@ const APP: () = {
     // Note that there is no `capacity` defined, so it will default to 1.
     #[task]
     fn printer1(_cx: printer1::Context, val: u32) {
-        rprintln!("Printer 1 says: {}", val);
+        log::info!("Printer 1 says: {}", val);
     }
 
     // With capacity we can take multiple messages!
     #[task(capacity = 4)]
     fn printer2(_cx: printer2::Context, val: u32) {
-        rprintln!("Printer 2 says: {}", val);
+        log::info!("Printer 2 says: {}", val);
     }
 
     // Here we list unused interrupt vectors that can be used to dispatch software tasks
     //
     // One needs one free interrupt per priority level used in software tasks.
     extern "C" {
-        fn DFSDM1();
-        fn DFSDM2();
+        fn TIMER1();
+        fn TIMER2();
     }
 };

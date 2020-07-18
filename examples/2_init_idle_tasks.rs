@@ -5,10 +5,8 @@
 
 use panic_halt as _;
 use rtic::app;
-use rtt_target::{rprintln, rtt_init_print};
-use stm32l4xx_hal as _;
 
-#[app(device = stm32l4xx_hal::stm32)]
+#[app(device = nrf52840_hal::pac)]
 const APP: () = {
     struct Resources {
         // Resources go here!
@@ -21,15 +19,15 @@ const APP: () = {
         // ...
 
         // Enable logging
-        rtt_init_print!();
+        app::init();
 
-        rprintln!("Hello from init!");
+        log::info!("Hello from init!");
     }
 
     // Optional idle task, if left out idle will be a WFI.
     #[idle]
     fn idle(_cx: idle::Context) -> ! {
-        rprintln!("Hello from idle!");
+        log::info!("Hello from idle!");
 
         loop {
             // Do some work or WFI.
@@ -42,7 +40,7 @@ const APP: () = {
         // A software task, i.e. it is NOT bound to any specific interrupt vector.
     }
 
-    #[task(binds = USART1)]
+    #[task(binds = UARTE0_UART0)]
     fn my_first_hardware_task(_cx: my_first_hardware_task::Context) {
         // A hardware task, i.e. it IS bound to a specific interrupt vector.
         // In this case it is bound to the interrupt of USART1.
@@ -54,6 +52,6 @@ const APP: () = {
     //
     // One needs one free interrupt per priority level used in software tasks.
     extern "C" {
-        fn DFSDM1();
+        fn TIMER1();
     }
 };

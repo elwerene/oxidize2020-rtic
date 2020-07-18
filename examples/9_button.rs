@@ -4,21 +4,19 @@
 #![no_main]
 #![no_std]
 
+use embedded_hal::digital::v2::OutputPin as _;
+use nrf52840_hal::{
+    gpio::{Level, Output, Pin, PushPull},
+    gpiote::*,
+};
 use panic_halt as _;
 use rtic::{app, cyccnt::U32Ext};
-use rtt_target::{rprintln, rtt_init_print};
-use stm32l4xx_hal::{
-    gpio::{gpiob::PB13, gpioc::PC13, Edge, Floating, Input, Output, PushPull},
-    prelude::*,
-};
 
-#[app(device = stm32l4xx_hal::stm32,
-      monotonic = rtic::cyccnt::CYCCNT,
-      peripherals = true)]
+#[app(device = nrf52840_hal::pac, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
     struct Resources {
-        led: PB13<Output<PushPull>>,
-        button: PC13<Input<Floating>>,
+        led: Pin<Output<PushPull>>,
+        gpiote: Gpiote,
     }
 
     #[init]
@@ -33,65 +31,52 @@ const APP: () = {
         cp.DCB.enable_trace();
         cp.DWT.enable_cycle_counter();
 
-        // Device access (Peripheral Access Crate)
-        let pac = cx.device;
-
         // Enable logging
-        rtt_init_print!();
-        rprintln!("Hello from init!");
+        app::init();
+        log::info!("Hello from init!");
+
+        let p0 = nrf52840_hal::gpio::p0::Parts::new(cx.device.P0);
 
         // Set up a LED
-        let mut rcc = pac.RCC.constrain();
-        let mut gpiob = pac.GPIOB.split(&mut rcc.ahb2);
-        let mut led = gpiob
-            .pb13
-            .into_push_pull_output(&mut gpiob.moder, &mut gpiob.otyper);
-
-        led.set_low().ok();
+        let mut led = p0.p0_13.degrade().into_push_pull_output(Level::High);
+        let _ = led.set_high();
 
         // Set up the button for interrupts
-        let mut syscfg = pac.SYSCFG;
-        let mut exti = pac.EXTI;
-        let mut gpioc = pac.GPIOC.split(&mut rcc.ahb2);
-
-        let mut button = gpioc
-            .pc13
-            .into_floating_input(&mut gpioc.moder, &mut gpioc.pupdr);
-        button.enable_interrupt(&mut exti);
-        button.make_interrupt_source(&mut syscfg, &mut rcc.apb2);
-        button.trigger_on_edge(&mut exti, Edge::RISING);
-        button.clear_interrupt_pending_bit();
+        let button = p0.p0_11.into_pullup_input().degrade();
+        let gpiote = Gpiote::new(cx.device.GPIOTE);
+        gpiote
+            .channel0()
+            .input_pin(&button)
+            .hi_to_lo()
+            .enable_interrupt();
 
         init::LateResources {
             // Move the LED to the resources.
             led,
-            // Move the Button to the resources.
-            button,
+            // Move Gpiote to the resources.
+            gpiote,
         }
     }
 
     #[idle]
     fn idle(_cx: idle::Context) -> ! {
-        rprintln!("Hello from idle!");
+        log::info!("Hello from idle!");
 
         loop {
-            continue;
+            //continue;
+            cortex_m::asm::wfi(); // NEEDED?
         }
     }
 
-    #[task(binds = EXTI15_10,
-           resources = [button],
-           spawn = [blinky])]
+    #[task(binds = GPIOTE, resources = [gpiote], spawn = [blinky])]
     fn button_event(cx: button_event::Context) {
-        let button = cx.resources.button;
+        let gpiote = cx.resources.gpiote;
 
-        rprintln!("Spawning blinky from button!");
+        log::info!("Spawning blinky from button!");
 
         cx.spawn.blinky().ok();
 
-        // Remeber to clear the interrupt!
-        // RTIC does not do this for you.
-        button.clear_interrupt_pending_bit();
+        gpiote.channel0().reset_events();
     }
 
     #[task(schedule = [blinky], resources = [led])]
@@ -102,15 +87,15 @@ const APP: () = {
         // Extract the LED
         let led = cx.resources.led;
 
-        if *FLAG == false {
-            led.set_low().ok();
-            rprintln!("LED Off");
+        if !(*FLAG) {
+            let _ = led.set_low();
+            log::info!("LED Off");
         } else {
-            led.set_high().ok();
-            rprintln!("LED On");
+            let _ = led.set_high();
+            log::info!("LED On");
         }
 
-        cx.schedule.blinky(cx.scheduled + 2_000_000.cycles()).ok();
+        cx.schedule.blinky(cx.scheduled + 64_000_000.cycles()).ok();
 
         *FLAG = !*FLAG;
     }
@@ -119,7 +104,6 @@ const APP: () = {
     //
     // One needs one free interrupt per priority level used in software tasks.
     extern "C" {
-        fn DFSDM1();
-        fn DFSDM2();
+        fn TIMER0();
     }
 };
