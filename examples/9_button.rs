@@ -6,7 +6,7 @@
 
 use embedded_hal::digital::v2::OutputPin as _;
 use nrf52840_hal::{
-    gpio::{Level, Output, Pin, PushPull},
+    gpio::{Input, Level, Output, Pin, PullUp, PushPull},
     gpiote::*,
 };
 use panic_halt as _;
@@ -16,6 +16,7 @@ use rtic::{app, cyccnt::U32Ext};
 const APP: () = {
     struct Resources {
         led: Pin<Output<PushPull>>,
+        button: Pin<Input<PullUp>>,
         gpiote: Gpiote,
     }
 
@@ -53,6 +54,8 @@ const APP: () = {
         init::LateResources {
             // Move the LED to the resources.
             led,
+            // Move the button to the resources.
+            button,
             // Move Gpiote to the resources.
             gpiote,
         }
@@ -68,15 +71,16 @@ const APP: () = {
         }
     }
 
-    #[task(binds = GPIOTE, resources = [gpiote], spawn = [blinky])]
+    #[task(binds = GPIOTE, resources = [gpiote, button], spawn = [blinky])]
     fn button_event(cx: button_event::Context) {
         let gpiote = cx.resources.gpiote;
+        let button = cx.resources.button;
 
         log::info!("Spawning blinky from button!");
 
         cx.spawn.blinky().ok();
 
-        gpiote.channel0().reset_events();
+        gpiote.channel0().input_pin(button).disable_interrupt();
     }
 
     #[task(schedule = [blinky], resources = [led])]
