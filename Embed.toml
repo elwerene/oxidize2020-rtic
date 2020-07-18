@@ -6,7 +6,7 @@ speed = 28000
 enabled = true
 
 [default.general]
-chip = "STM32L412CBUx"
+chip = "nRF52840_xxAA"
 
 [default.rtt]
 enabled = true
